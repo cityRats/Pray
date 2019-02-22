@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - glTF loader</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link rel="stylesheet" media="screen" href="https://fontlibrary.org/face/gfs-jackson" type="text/css"/>
+		<style>
+			body {
+				font-family: Monospace;
+				background-color: #000;
+				color: #fff;
+				margin: 0px;
+				overflow: hidden;
+			}
+			#info {
+				font-family: "GFSJacksonRegular";
+				font-size: 20px;
+				color:  #716f6f;				
+				position: absolute;
+				top: 50px;
+				width: 100%;
+				text-align: center;
+				z-index: 100;
+				display:block;
+			}
+			#info a {
+				color: #75ddc1;
+				font-weight: bold;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div id="info">			
+			ΥΠΕΡ ΑΛΛΗΛΕΓΓΥΗΣ			
+		</div>
+
+		<script src="threejs/three.js"></script>
+
+		<script src="js/OrbitControls.js"></script>
+		<script src="js/GLTFLoader.js"></script>
+
+		<script src="js/WebGL.js"></script>
+		<script src="js/stats.min.js"></script>
+
+		<script src="js/CSS3DRenderer.js"></script>
+		<script src="js/GPUParticleSystem.js"></script>
+		<script src="js/dat.gui.min.js"></script>
+
+
+		<script>
+			if ( WEBGL.isWebGLAvailable() === false ) {
+				document.body.appendChild( WEBGL.getWebGLErrorMessage() );
+			}
+			var container, stats, controls;
+			var camera, scene, scene2, renderer, light, raycaster, sound;
+			var objects = [], plane;
+			var glow = [];
+			var particles = [];
+			var particleDir = [];
+			var particleMoveX = [];
+			var particleMoveY = [];
+			var particleSpeed = 0.025;
+			var isGlowing = true;
+			var bombing = false;
+			var timeForBridges = false;
+			var bridgeTime, currentTime;
+			var startBombingTime = 0;			
+			var c = 1;
+			var tick = 0;
+			var particlesNum = 100;
+			var clock = new THREE.Clock();
+			var waitForBridges = false;
+	
+			//gui = new dat.GUI( { width: 350 } );
+			//var particleSystem, options, spawnerOptions;
+			
+			var mouse = new THREE.Vector2(), INTERSECTED, SELECTED;
+
+			var modelBridge = "assets/Gefiri.glb";
+			var raycaster = new THREE.Raycaster();
+			init();
+			animate();
+
+
+			function init() {
+				var frustumSize = 0.3;
+				var aspect = window.innerWidth / window.innerHeight;
+
+				container = document.createElement( 'div' );
+				document.body.appendChild( container );
+				
+				//camera
+
+				//camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 1000 );
+				//camera.position.set( 0, 0, 0.6 );
+				camera = new THREE.OrthographicCamera( frustumSize * aspect / - 2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, 0.01, 1000 );
+				camera.position.y = 0;
+				camera.position.z =20;
+				camera.position.x = 0;
+
+
+				//controls
+				controls = new THREE.OrbitControls( camera );
+				controls.target.set( 0, 0, 0 );
+				controls.update();
+				controls.enabled = false;
+				
+				//scenes
+				scene = new THREE.Scene();
+				scene.background = new THREE.Color( 0x7ccdb5 );
+				scene.position.set(0,0,0);
+
+				scene2 = new THREE.Scene();
+				//scene2.background = new THREE.Color( 0x7ccdb5 );
+				scene2.position.set(0,0,0.1);							
+				
+				//lights
+				
+				light = new THREE.HemisphereLight( 0xbbbbff, 0x444422 );
+				light.position.set( 0, 1, 0 );
+				scene.add( light );
+				
+				// model
+
+				var loader = new THREE.GLTFLoader();
+				loader.load( modelBridge, function ( gltf ) {
+					gltf.scene.traverse( function ( child ) {
+						if ( child.isMesh ) {
+							//child.material.envMap = background;							
+							var material = new THREE.MeshBasicMaterial();
+							material.map = child.material.map;
+							material.alphaTest = 0.5;
+							material.skinning = true;
+							material.side = THREE.DoubleSide;
+							child.material = material;
+							child.material.needsUpdate = true;
+						}
+					} );
+					gltf.scene.position.set(-0.006, -0.03, 0);
+					scene.add( gltf.scene );
+
+
+				}, undefined, function ( e ) {
+					console.error( e );
+				} );
+
+				//sprites
+
+				var spriteMap = new THREE.TextureLoader().load( "textures/coin_256.png" );
+				var spriteMaterial = new THREE.SpriteMaterial( { map: spriteMap, color: 0xffffff } );
+				var coin_s = new THREE.Sprite( spriteMaterial );
+				coin_s.scale.set(0.02, 0.02, 0.02);
+				coin_s.position.set(0,0.1,0);
+				scene2.add( coin_s );
+				objects.push(coin_s)
+
+
+				var spriteMap2 = new THREE.TextureLoader().load( "textures/glow.png" );
+				var spriteMaterial2 = new THREE.SpriteMaterial( { map: spriteMap2, color: 0xffffff } );
+				var sprite = new THREE.Sprite( spriteMaterial2 );
+				sprite.scale.set(0.07, 0.07, 0.07);
+				sprite.position.set(0,0.1,0);
+				scene.add( sprite );
+				glow.push(sprite);
+
+				//particles
+				var vec = new THREE.Vector2( 0, 0.1 );
+				var angle = 360/particlesNum;
+				var spriteMap3 = new THREE.TextureLoader().load( "textures/coin_256.png" );
+				var spriteMaterial3 = new THREE.SpriteMaterial( { map: spriteMap3, color: 0xffffff } );
+				for(i=0; i<particlesNum; i++){
+					var bomb = new THREE.Sprite( spriteMaterial3 );
+					bomb.scale.set(0.005, 0.005, 0.005);
+					bomb.position.set(0,-0.01,0);
+					bomb.material.opacity = 0;
+					scene2.add( bomb );
+					particles.push(bomb);
+
+					var initVec = new THREE.Vector2( 0, 0.1 );//na gurnaei auto
+					var center = new THREE.Vector2(0,-0.01);
+					var angle = 2* Math.PI / particlesNum ;
+					var direction = initVec.rotateAround(center, angle*i);
+					var vector = direction.multiplyScalar( particleSpeed, particleSpeed );
+					console.log("kkkk"+angle);
+					
+					particleMoveX.push(vector.x);
+					particleMoveY.push(vector.y);
+				}
+
+				
+
+
+				//render
+				renderer = new THREE.WebGLRenderer( { antialias: true } );
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.gammaOutput = true;
+				container.appendChild( renderer.domElement );
+				window.addEventListener( 'resize', onWindowResize, false );
+
+				//audio
+				var listener = new THREE.AudioListener();
+				camera.add( listener );
+				sound = new THREE.Audio( listener );
+				var audioLoader = new THREE.AudioLoader();
+				audioLoader.load( 'sounds/bit2.ogg', function( buffer ) {
+					sound.setBuffer( buffer );
+					sound.setLoop( true );
+					sound.setVolume( 0.5 );
+					//sound.play();
+				});
+
+				// stats
+				//stats = new Stats();
+				//container.appendChild( stats.dom );
+
+
+				// eventListener!				
+
+				//window.addEventListener( 'mousemove', onDocumentMouseMove, false );
+				renderer.domElement.addEventListener( 'mousemove', onDocumentMouseMove, false );
+				renderer.domElement.addEventListener( 'mousedown', onDocumentMouseDown, false );
+				renderer.domElement.addEventListener( 'mouseup', onDocumentMouseUp, false );
+				//window.addEventListener( 'resize', onWindowResize, false );
+				
+
+			}
+
+
+			
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+			
+			function animate() {					
+
+				requestAnimationFrame( animate );
+
+				if(isGlowing){
+					glowAnimation(glow[0]);
+				}
+
+				if (bombing){
+					
+					for (i=0; i< particlesNum; i++){
+						particles[i].position.x += particleMoveX[i];
+						particles[i].position.y += particleMoveY[i];
+
+						particles[i].material.opacity -=0.0001;
+						//console.log("Bomb "+ i + ": " + particles[i].position.x );
+						//console.log("Bomb "+ i + ": " + particleMoveX[i] );
+						
+					}
+					time = new Date().getTime();
+					if (time >= startBombingTime + 2000){
+						sound.play();
+						bombing = false;
+						bridgeAnimation();
+						waitForBridges = true;
+						
+						timeForBridges = true;
+						bridgesTime = time;
+						
+						
+					}					
+
+				}	
+
+				if (timeForBridges){
+
+					if(waitForBridges){
+						currentTime = new Date().getTime();
+						if (currentTime > bridgesTime + 2000){
+							bridgesTime = currentTime;
+							//console.log("brrrrrrrr");
+							createBridge();
+						}
+
+						waitForBridges = false;
+					}else{
+
+						currentTime = new Date().getTime();						
+						if (currentTime > bridgesTime + 300){
+							bridgesTime = currentTime;
+							//console.log("brrrrrrrr");
+							createBridge();
+						}
+					}
+				
+				}			
+
+
+				render();				
+				//stats.update();				
+			}
+
+			
+
+			function onDocumentMouseMove( event ) {
+
+			 	event.preventDefault();
+
+			 	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+			 	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+				if (SELECTED) {
+					//SELECTED.position.set(mouse.position);
+					SELECTED.position.x = 0;
+					SELECTED.position.y = mouse.y/7;
+					SELECTED.position.z = 0;
+					glow[0].position.y = SELECTED.position.y;
+
+					if (SELECTED.position.y <= 0){						
+						console.log("Mpam " + SELECTED.position.y );						
+						scene2.remove(objects[0]);
+						objects = [];
+						SELECTED = null;
+						bombing = true;
+						
+						for(i=0; i<particlesNum; i++){
+							
+							particles[i].material.opacity = 1;											
+							
+							
+						}
+						startBombingTime = new Date().getTime();
+
+					}	
+				}	
+
+
+				
+			}
+
+			function onDocumentMouseDown( event ) {
+
+				event.preventDefault();
+
+				mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+				mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+				raycaster.setFromCamera( mouse, camera );
+				var intersects = raycaster.intersectObjects( objects );
+
+
+				if ( intersects.length > 0 ) {
+
+						if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
+						INTERSECTED = intersects[ 0 ].object;
+						console.log("Hit @ " + toString( intersects[0].point ) );
+						INTERSECTED.currentHex = INTERSECTED.material.color.getHex();						
+						SELECTED= intersects[ 0 ].object;						
+						isGlowing = false;					
+
+						
+				} else {
+					if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
+					INTERSECTED = null;
+				}
+				render();
+				
+			}
+			function onDocumentMouseUp( event ) {
+
+				event.preventDefault();
+
+				
+				if ( SELECTED ) {
+					SELECTED.material.color.setHex( 0xe8cf27 );
+					SELECTED = null;
+					isGlowing = true;
+
+				}
+				container.style.cursor = 'auto';
+			}
+
+
+			function render() {
+				renderer.autoClear = true;
+
+				renderer.render( scene, camera );
+				renderer.autoClear = false;
+				renderer.render( scene2, camera );
+			}
+
+			// function wait(ms){
+			// 	var start = new Date().getTime();
+			// 	var end = start;
+			// 	while (end < start +ms){
+			// 		end = new Date().getTime();
+			// 	}
+
+			// }
+
+			function glowAnimation(obj){
+				if (obj.material.opacity >= 0.1 ){
+					obj.material.opacity -= 0.08;
+				}else{
+					obj.material.opacity = 1;
+				}				
+			}
+
+			function bridgeAnimation(){
+				scene.traverse( function ( child ) {
+						if ( child.isMesh ) {												
+							if (c == 1){
+								child.rotation.x = Math.PI * (1); // gefiri
+								c = 0;
+							}
+							else{
+								child.rotation.x = Math.PI; //pagkari								
+							}
+						}
+					} );			
+				
+			}
+
+			function createBridge(){
+				var spriteMapB = new THREE.TextureLoader().load( "textures/gefiri.png" );
+				var spriteMaterialB = new THREE.SpriteMaterial( { map: spriteMapB, color: 0xffffff } );
+				var bridge = new THREE.Sprite( spriteMaterialB );
+				// var scaleB = Math.random()*0.5;
+				
+				//find position X
+				//var randomX =Math.floor(Math.random() * (0.2 - 0.2)) + 0.2;
+				var randomX =Math.random()/4;
+				var plusOrMinus = Math.random() < 0.5 ? -1 : 1;
+				x = randomX * plusOrMinus;
+
+				//find position Y
+				var randomY =Math.random()/4;
+				var plusOrMinus = Math.random() < 0.5 ? -1 : 1;
+				y = randomY * plusOrMinus;
+				
+				bridge.scale.set(0.2, 0.2, 0.2);
+				bridge.position.set(x,y,0);
+				scene2.add( bridge );
+			}
+
+			// function onWindowResize() {
+			// 	var aspect = window.innerWidth / window.innerHeight;
+			// 	camera.left = - frustumSize * aspect / 2;
+			// 	camera.right = frustumSize * aspect / 2;
+			// 	camera.top = frustumSize / 2;
+			// 	camera.bottom = - frustumSize / 2;
+			// 	camera.updateProjectionMatrix();
+			// 	renderer.setSize( window.innerWidth, window.innerHeight );
+			// }
+
+
+			
+		</script>
+
+	</body>
+</html>
