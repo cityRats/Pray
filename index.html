@@ -225,6 +225,10 @@
 				renderer.domElement.addEventListener( 'mouseup', onDocumentMouseUp, false );
 				//window.addEventListener( 'resize', onWindowResize, false );
 				
+				renderer.domElement.addEventListener('touchstart', onTouchStart, false);
+				renderer.domElement.addEventListener('touchmove', onTouchMove, false);
+				renderer.domElement.addEventListener('touchend', onTouchEnd, false);
+				
 
 			}
 
@@ -302,7 +306,7 @@
 
 			function onDocumentMouseMove( event ) {
 
-			 	//event.preventDefault();
+			 	event.preventDefault();
 
 			 	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
 			 	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
@@ -338,7 +342,7 @@
 
 			function onDocumentMouseDown( event ) {
 
-				//event.preventDefault();
+				event.preventDefault();
 
 				mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
 				mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
@@ -366,7 +370,7 @@
 			}
 			function onDocumentMouseUp( event ) {
 
-				//event.preventDefault();
+				event.preventDefault();
 
 				
 				if ( SELECTED ) {
@@ -450,6 +454,81 @@
 			// 	camera.updateProjectionMatrix();
 			// 	renderer.setSize( window.innerWidth, window.innerHeight );
 			// }
+			
+			
+			function onTouchStart( event ){
+				event.preventDefault();
+
+				mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+				mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+				raycaster.setFromCamera( mouse, camera );
+				var intersects = raycaster.intersectObjects( objects );
+
+
+				if ( intersects.length > 0 ) {
+
+						if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
+						INTERSECTED = intersects[ 0 ].object;
+						//console.log("Hit @ " + toString( intersects[0].point ) );
+						INTERSECTED.currentHex = INTERSECTED.material.color.getHex();						
+						SELECTED= intersects[ 0 ].object;						
+						isGlowing = false;					
+
+						
+				} else {
+					if ( INTERSECTED ) INTERSECTED.material.color.setHex( INTERSECTED.currentHex );
+					INTERSECTED = null;
+				}
+				render();
+			}
+
+			function onTouchEnd (event){
+
+				event.preventDefault();
+
+				
+				if ( SELECTED ) {
+					SELECTED.material.color.setHex( 0xe8cf27 );
+					SELECTED = null;
+					isGlowing = true;
+
+				}
+				//container.style.cursor = 'auto';
+			}
+
+			function onTouchMove (event){
+
+				event.preventDefault();
+
+			 	mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+			 	mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+				if (SELECTED) {
+					//SELECTED.position.set(mouse.position);
+					SELECTED.position.x = 0;
+					SELECTED.position.y = mouse.y/7;
+					SELECTED.position.z = 0;
+					glow[0].position.y = SELECTED.position.y;
+
+					if (SELECTED.position.y <= 0){						
+						//console.log("Mpam " + SELECTED.position.y );						
+						scene2.remove(objects[0]);
+						objects = [];
+						SELECTED = null;
+						bombing = true;
+						
+						for(i=0; i<particlesNum; i++){
+							
+							particles[i].material.opacity = 1;											
+							
+							
+						}
+						startBombingTime = new Date().getTime();
+
+					}	
+				}
+			}
 
 
 			
